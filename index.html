@@ -1,0 +1,987 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#0f172a" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="PrintOps" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="description" content="Print Sampling Reports and Printer Maintenance Job Management" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <title>Print Sampling & Maintenance</title>
+  <style>
+    :root {
+      --bg: #0f172a; --surface: #1e293b; --surface-2: #334155;
+      --primary: #3b82f6; --success: #22c55e; --warning: #f59e0b; --danger: #ef4444;
+      --text: #f1f5f9; --text-muted: #94a3b8; --radius: 12px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+    #app { max-width: 480px; margin: 0 auto; min-height: 100vh; position: relative; }
+    .screen { display: none; min-height: 100vh; flex-direction: column; }
+    .screen.active { display: flex; }
+
+    .role-container { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 1.5rem; gap: 1.2rem; }
+    .logo { text-align: center; }
+    .logo-icon { font-size: 2.8rem; }
+    .logo h1 { font-size: 1.5rem; font-weight: 700; margin-top: 0.25rem; }
+    .subtitle { color: var(--text-muted); font-size: 0.85rem; }
+    .role-cards { width: 100%; display: flex; flex-direction: column; gap: 0.75rem; }
+    .role-card {
+      background: var(--surface); border: 2px solid transparent; border-radius: var(--radius);
+      padding: 1.15rem; text-align: left; color: var(--text); cursor: pointer;
+    }
+    .role-card:active { transform: scale(0.98); }
+    .role-icon { font-size: 1.6rem; }
+    .role-card h2 { font-size: 1.05rem; margin: 0.2rem 0; }
+    .role-card p { color: var(--text-muted); font-size: 0.8rem; }
+
+    .app-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0.8rem 1rem; background: var(--surface); border-bottom: 1px solid var(--surface-2);
+      position: sticky; top: 0; z-index: 10;
+    }
+    .app-header h1 { font-size: 1rem; }
+    .header-actions { display: flex; align-items: center; gap: 0.25rem; }
+    .back-btn, .icon-btn {
+      background: none; border: none; color: var(--text); font-size: 1.25rem;
+      width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    }
+    .badge {
+      background: var(--danger); color: #fff; font-size: 0.7rem; font-weight: 700;
+      min-width: 18px; height: 18px; border-radius: 9px; display: flex; align-items: center; justify-content: center; padding: 0 4px;
+    }
+
+    .tabs { display: flex; background: var(--surface); padding: 0.4rem 0.8rem 0; gap: 0.3rem; border-bottom: 1px solid var(--surface-2); overflow-x: auto; }
+    .tab {
+      flex: 1; min-width: 70px; background: none; border: none; color: var(--text-muted); padding: 0.6rem 0.25rem;
+      font-size: 0.8rem; font-weight: 500; border-bottom: 2px solid transparent; white-space: nowrap;
+    }
+    .tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+    .list-container { flex: 1; padding: 0.8rem; overflow-y: auto; display: flex; flex-direction: column; gap: 0.65rem; }
+    .card {
+      background: var(--surface); border-radius: var(--radius); padding: 0.9rem;
+      cursor: pointer; border-left: 4px solid var(--surface-2);
+    }
+    .card.new, .card.pending { border-left-color: var(--warning); }
+    .card.in_progress { border-left-color: var(--primary); }
+    .card.completed { border-left-color: var(--success); }
+    .card.failed { border-left-color: var(--danger); }
+    .card-header { display: flex; justify-content: space-between; margin-bottom: 0.25rem; }
+    .card-id { font-weight: 700; font-size: 0.95rem; }
+    .card-status { font-size: 0.65rem; font-weight: 600; text-transform: uppercase; padding: 0.15rem 0.35rem; border-radius: 4px; }
+    .card-status.new, .card-status.pending { background: #422006; color: #fbbf24; }
+    .card-status.in_progress { background: #1e3a5f; color: #60a5fa; }
+    .card-status.completed { background: #14532d; color: #4ade80; }
+    .card-status.failed { background: #450a0a; color: #f87171; }
+    .card-desc { color: var(--text-muted); font-size: 0.82rem; margin-bottom: 0.3rem; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .card-meta { font-size: 0.7rem; color: var(--text-muted); display: flex; justify-content: space-between; }
+    .empty-state { text-align: center; padding: 2.2rem 1rem; color: var(--text-muted); }
+    .empty-state .icon { font-size: 2.4rem; margin-bottom: 0.5rem; opacity: 0.5; }
+
+    .modal {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 100;
+      display: flex; align-items: flex-end; justify-content: center; max-width: 480px; margin: 0 auto;
+    }
+    .modal.hidden { display: none; }
+    .modal-content {
+      background: var(--bg); width: 100%; max-height: 94vh; border-radius: 16px 16px 0 0;
+      overflow-y: auto; animation: slideUp 0.22s ease;
+    }
+    @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+    .modal-header {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 1rem 1rem 0.5rem; position: sticky; top: 0; background: var(--bg); z-index: 5;
+    }
+    .modal-header h2 { font-size: 1.05rem; }
+    .close-btn {
+      background: var(--surface); border: none; color: var(--text); width: 32px; height: 32px;
+      border-radius: 50%; font-size: 1.2rem; display: flex; align-items: center; justify-content: center;
+    }
+
+    .form-group { margin-bottom: 0.9rem; padding: 0 1rem; }
+    .form-group label {
+      display: block; font-size: 0.72rem; font-weight: 600; color: var(--text-muted);
+      margin-bottom: 0.25rem; text-transform: uppercase;
+    }
+    .form-group input, .form-group textarea, .form-group select {
+      width: 100%; background: var(--surface); border: 1px solid var(--surface-2);
+      border-radius: 8px; padding: 0.7rem 0.85rem; color: var(--text); font-size: 0.95rem; outline: none;
+    }
+    .form-group textarea { min-height: 70px; resize: vertical; }
+    .form-row { display: flex; gap: 0.6rem; padding: 0 1rem; margin-bottom: 0.9rem; }
+    .form-row .form-group { flex: 1; padding: 0; margin: 0; }
+
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 0.3rem;
+      padding: 0.7rem 1.2rem; border-radius: 8px; font-size: 0.9rem; font-weight: 600;
+      border: none; cursor: pointer;
+    }
+    .btn.primary { background: var(--primary); color: #fff; }
+    .btn.success { background: var(--success); color: #fff; }
+    .btn.warning { background: var(--warning); color: #000; }
+    .btn.outline { background: transparent; color: var(--text); border: 1px solid var(--surface-2); }
+    .btn.full { width: calc(100% - 2rem); margin: 0.3rem 1rem 1rem; }
+    .btn.small { padding: 0.4rem 0.8rem; font-size: 0.8rem; }
+    .btn:disabled { opacity: 0.5; }
+
+    .detail-section { padding: 0 1rem 0.9rem; }
+    .detail-row {
+      display: flex; justify-content: space-between; padding: 0.35rem 0;
+      border-bottom: 1px solid var(--surface-2); font-size: 0.85rem;
+    }
+    .detail-row .label { color: var(--text-muted); }
+    .detail-row .value { font-weight: 500; text-align: right; max-width: 60%; }
+    .photo-preview { width: 100%; border-radius: 8px; margin-top: 0.4rem; max-height: 220px; object-fit: cover; }
+    .photo-placeholder {
+      width: 100%; height: 140px; background: var(--surface); border-radius: 8px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      color: var(--text-muted); gap: 0.3rem; margin-top: 0.4rem; border: 2px dashed var(--surface-2);
+    }
+    .photo-placeholder input { display: none; }
+    .result-btns { display: flex; gap: 0.5rem; margin-top: 0.3rem; }
+    .result-btns .btn { flex: 1; }
+    .result-btns .btn.active.pass, .result-btns .btn.active.ok { background: var(--success); color: #fff; }
+    .result-btns .btn.active.fail, .result-btns .btn.active.notok { background: var(--danger); color: #fff; }
+    .result-btns .btn:not(.active) { background: var(--surface); color: var(--text-muted); border: 1px solid var(--surface-2); }
+
+    .spare-item {
+      background: var(--surface); border-radius: 8px; padding: 0.7rem; margin-bottom: 0.5rem;
+      display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem;
+    }
+    .spare-item .info { flex: 1; }
+    .spare-item .name { font-weight: 600; font-size: 0.9rem; }
+    .spare-item .desc { color: var(--text-muted); font-size: 0.8rem; margin-top: 0.15rem; }
+    .spare-item .remove { background: none; border: none; color: var(--danger); font-size: 1.1rem; padding: 0.2rem; }
+
+    .toast {
+      position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%);
+      background: var(--surface-2); color: #fff; padding: 0.7rem 1.2rem;
+      border-radius: 40px; font-size: 0.85rem; z-index: 200; max-width: 90%; text-align: center;
+    }
+    .toast.hidden { display: none; }
+    .toast.success { background: #166534; }
+    .toast.error { background: #991b1b; }
+
+    .config-box {
+      background: #1e3a5f; border-radius: 10px; padding: 0.9rem; margin: 0 0.4rem;
+      font-size: 0.8rem; line-height: 1.4; color: #93c5fd;
+    }
+    .config-box input {
+      width: 100%; margin-top: 0.4rem; padding: 0.55rem; border-radius: 6px;
+      border: 1px solid #3b82f6; background: #0f172a; color: #fff; font-size: 0.82rem;
+    }
+    .config-box button { margin-top: 0.5rem; width: 100%; }
+    .loading { text-align: center; padding: 1.8rem; color: var(--text-muted); }
+    .spinner {
+      width: 24px; height: 24px; border: 3px solid var(--surface-2);
+      border-top-color: var(--primary); border-radius: 50%; animation: spin 0.7s linear infinite;
+      margin: 0 auto 0.6rem;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .bottom-bar {
+      padding: 0.6rem 0.9rem; background: var(--surface); border-top: 1px solid var(--surface-2);
+      display: flex; gap: 0.5rem;
+    }
+    .bottom-bar .btn { flex: 1; padding: 0.65rem; font-size: 0.85rem; }
+    .change-url-btn {
+      background: none; border: none; color: var(--text-muted); font-size: 0.75rem;
+      margin-top: 0.8rem; text-decoration: underline; cursor: pointer;
+    }
+    .section-title {
+      font-size: 0.75rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase;
+      padding: 0.6rem 1rem 0.3rem; letter-spacing: 0.3px;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <!-- ROLE SCREEN -->
+    <section id="role-screen" class="screen active">
+      <div class="role-container">
+        <div class="logo">
+          <div class="logo-icon">🖨️</div>
+          <h1>Print Operations</h1>
+          <p class="subtitle">Sampling + Maintenance</p>
+        </div>
+
+        <div id="config-section" class="config-box">
+          <strong>Setup (one time)</strong><br>
+          Paste Google Apps Script Web App URL:
+          <input type="url" id="script-url" placeholder="https://script.google.com/macros/s/...../exec" />
+          <button class="btn primary" onclick="saveScriptUrl()">Save & Continue</button>
+        </div>
+
+        <div id="role-section" style="display:none; width:100%;">
+          <div class="role-cards">
+            <button class="role-card" onclick="selectRole('manager')">
+              <div class="role-icon">👔</div>
+              <h2>Manager</h2>
+              <p>View all reports • Export Excel</p>
+            </button>
+            <button class="role-card" onclick="selectRole('sampling')">
+              <div class="role-icon">🔬</div>
+              <h2>Sampling Department</h2>
+              <p>Create & complete sampling reports</p>
+            </button>
+            <button class="role-card" onclick="selectRole('maintenance')">
+              <div class="role-icon">🔧</div>
+              <h2>Printer Maintenance</h2>
+              <p>Job cards • Spares • Closure</p>
+            </button>
+          </div>
+          <button class="change-url-btn" onclick="showConfig()">Change Script URL</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== MANAGER ==================== -->
+    <section id="manager-screen" class="screen">
+      <header class="app-header">
+        <button class="back-btn" onclick="goToRoleSelect()">←</button>
+        <h1>Manager</h1>
+        <div class="header-actions">
+          <button class="icon-btn" onclick="exportCurrent()">⬇</button>
+        </div>
+      </header>
+      <div class="tabs">
+        <button class="tab active" data-module="sampling" onclick="managerSwitch('sampling')">Sampling</button>
+        <button class="tab" data-module="maintenance" onclick="managerSwitch('maintenance')">Maintenance</button>
+      </div>
+      <div class="tabs" id="manager-subtabs">
+        <button class="tab active" data-tab="all" onclick="managerSubTab('all')">All</button>
+        <button class="tab" data-tab="pending" onclick="managerSubTab('pending')">Pending</button>
+        <button class="tab" data-tab="completed" onclick="managerSubTab('completed')">Completed</button>
+      </div>
+      <div id="manager-list" class="list-container"><div class="loading"><div class="spinner"></div>Loading...</div></div>
+      <div class="bottom-bar">
+        <button class="btn outline" onclick="exportCurrent()">⬇ Export to Excel</button>
+      </div>
+    </section>
+
+    <!-- ==================== SAMPLING DEPARTMENT ==================== -->
+    <section id="sampling-screen" class="screen">
+      <header class="app-header">
+        <button class="back-btn" onclick="goToRoleSelect()">←</button>
+        <h1>Sampling Department</h1>
+        <div class="header-actions">
+          <span class="badge" id="samp-pending-count">0</span>
+          <button class="icon-btn" onclick="showCreateSampling()">＋</button>
+        </div>
+      </header>
+      <div class="tabs">
+        <button class="tab active" data-tab="pending" onclick="sampTab('pending')">To Do</button>
+        <button class="tab" data-tab="completed" onclick="sampTab('completed')">Done</button>
+        <button class="tab" data-tab="all" onclick="sampTab('all')">All</button>
+      </div>
+      <div id="sampling-list" class="list-container"><div class="loading"><div class="spinner"></div>Loading...</div></div>
+    </section>
+
+    <!-- ==================== PRINTER MAINTENANCE ==================== -->
+    <section id="maintenance-screen" class="screen">
+      <header class="app-header">
+        <button class="back-btn" onclick="goToRoleSelect()">←</button>
+        <h1>Printer Maintenance</h1>
+        <div class="header-actions">
+          <span class="badge" id="mnt-open-count">0</span>
+          <button class="icon-btn" onclick="showCreateMaintenance()">＋</button>
+        </div>
+      </header>
+      <div class="tabs">
+        <button class="tab active" data-tab="new" onclick="mntTab('new')">New</button>
+        <button class="tab" data-tab="in_progress" onclick="mntTab('in_progress')">In Progress</button>
+        <button class="tab" data-tab="completed" onclick="mntTab('completed')">Completed</button>
+      </div>
+      <div id="maintenance-list" class="list-container"><div class="loading"><div class="spinner"></div>Loading...</div></div>
+    </section>
+
+    <!-- ========== CREATE SAMPLING MODAL ========== -->
+    <div id="create-samp-modal" class="modal hidden">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>New Sampling Request</h2>
+          <button class="close-btn" onclick="hideModal('create-samp-modal')">×</button>
+        </div>
+        <form onsubmit="createSampling(event)">
+          <div class="form-group">
+            <label>Sample / Job ID *</label>
+            <input type="text" id="samp-id" required placeholder="e.g. PS-2025-001" />
+          </div>
+          <div class="form-group">
+            <label>Description *</label>
+            <textarea id="samp-desc" required rows="3" placeholder="What needs to be sampled?"></textarea>
+          </div>
+          <div class="form-group">
+            <label>Priority</label>
+            <select id="samp-priority">
+              <option value="normal">Normal</option>
+              <option value="high">High</option>
+              <option value="urgent">Urgent</option>
+            </select>
+          </div>
+          <button type="submit" class="btn primary full" id="samp-create-btn">Create Request</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- ========== CREATE MAINTENANCE MODAL ========== -->
+    <div id="create-mnt-modal" class="modal hidden">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>New Maintenance Job</h2>
+          <button class="close-btn" onclick="hideModal('create-mnt-modal')">×</button>
+        </div>
+        <form onsubmit="createMaintenance(event)">
+          <div class="form-group">
+            <label>Customer Name *</label>
+            <input type="text" id="mnt-customer" required />
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Place *</label>
+              <input type="text" id="mnt-place" required />
+            </div>
+            <div class="form-group">
+              <label>Requested By</label>
+              <input type="text" id="mnt-requestedby" />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Printer Model *</label>
+              <input type="text" id="mnt-model" required />
+            </div>
+            <div class="form-group">
+              <label>Serial No. *</label>
+              <input type="text" id="mnt-serial" required />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Date</label>
+              <input type="date" id="mnt-date" />
+            </div>
+            <div class="form-group">
+              <label>Engineer Name *</label>
+              <input type="text" id="mnt-engineer" required />
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Current Printer Condition / Problem *</label>
+            <textarea id="mnt-condition" required rows="3" placeholder="Describe the problem and current condition of the printer..."></textarea>
+          </div>
+          <button type="submit" class="btn primary full" id="mnt-create-btn">Create Job</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- ========== DETAIL / WORK MODAL ========== -->
+    <div id="detail-modal" class="modal hidden">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2 id="detail-title">Details</h2>
+          <button class="close-btn" onclick="hideModal('detail-modal')">×</button>
+        </div>
+        <div id="detail-body"></div>
+      </div>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+  </div>
+
+  <script>
+    let SCRIPT_URL = localStorage.getItem('sampling_script_url') || '';
+    let currentRole = null;
+    let managerModule = 'sampling';   // sampling | maintenance
+    let managerSub = 'all';
+    let sampCurrentTab = 'pending';
+    let mntCurrentTab = 'new';
+    let samplingData = [];
+    let maintenanceData = [];
+    let refreshTimer = null;
+    let currentSpares = [];          // temporary while editing a job
+    let editingMntId = null;
+
+    // ---------- INIT ----------
+    window.onload = function() {
+      if (SCRIPT_URL) {
+        document.getElementById('config-section').style.display = 'none';
+        document.getElementById('role-section').style.display = 'block';
+        document.getElementById('script-url').value = SCRIPT_URL;
+      }
+      // default date
+      const today = new Date().toISOString().slice(0,10);
+      const dateInput = document.getElementById('mnt-date');
+      if (dateInput) dateInput.value = today;
+    };
+
+    function saveScriptUrl() {
+      const url = document.getElementById('script-url').value.trim();
+      if (!url || !url.includes('script.google.com')) {
+        showToast('Please paste a valid Script URL', 'error'); return;
+      }
+      SCRIPT_URL = url;
+      localStorage.setItem('sampling_script_url', url);
+      document.getElementById('config-section').style.display = 'none';
+      document.getElementById('role-section').style.display = 'block';
+      showToast('Saved', 'success');
+    }
+    function showConfig() {
+      document.getElementById('role-section').style.display = 'none';
+      document.getElementById('config-section').style.display = 'block';
+    }
+
+    // ---------- API ----------
+    async function api(action, data = {}) {
+      const res = await fetch(SCRIPT_URL, {
+        method: 'POST',
+        body: JSON.stringify({ action, ...data }),
+        headers: { 'Content-Type': 'text/plain' }
+      });
+      return res.json();
+    }
+
+    // ---------- ROLE ----------
+    function selectRole(role) {
+      if (!SCRIPT_URL) { showToast('Save Script URL first', 'error'); return; }
+      currentRole = role;
+      document.getElementById('role-screen').classList.remove('active');
+      if (role === 'manager') {
+        document.getElementById('manager-screen').classList.add('active');
+        managerModule = 'sampling'; managerSub = 'all';
+        document.querySelectorAll('#manager-screen .tabs:first-of-type .tab').forEach(t => t.classList.toggle('active', t.dataset.module === 'sampling'));
+      } else if (role === 'sampling') {
+        document.getElementById('sampling-screen').classList.add('active');
+        sampCurrentTab = 'pending';
+      } else {
+        document.getElementById('maintenance-screen').classList.add('active');
+        mntCurrentTab = 'new';
+      }
+      loadAll();
+      if (refreshTimer) clearInterval(refreshTimer);
+      refreshTimer = setInterval(loadAll, 25000);
+    }
+    function goToRoleSelect() {
+      if (refreshTimer) clearInterval(refreshTimer);
+      currentRole = null;
+      document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+      document.getElementById('role-screen').classList.add('active');
+      hideModal('detail-modal');
+      hideModal('create-samp-modal');
+      hideModal('create-mnt-modal');
+    }
+
+    // ---------- LOAD ----------
+    async function loadAll() {
+      try {
+        const [sampRes, mntRes] = await Promise.all([
+          api('list'),
+          api('listMaintenance')
+        ]);
+        if (sampRes.success) samplingData = sampRes.data || [];
+        if (mntRes.success) maintenanceData = mntRes.data || [];
+        renderCurrent();
+      } catch (e) {
+        console.error(e);
+        showToast('Connection error', 'error');
+      }
+    }
+    function renderCurrent() {
+      if (currentRole === 'manager') renderManager();
+      else if (currentRole === 'sampling') renderSampling();
+      else if (currentRole === 'maintenance') renderMaintenance();
+    }
+
+    // ---------- MANAGER ----------
+    function managerSwitch(mod) {
+      managerModule = mod;
+      document.querySelectorAll('#manager-screen .tabs:first-of-type .tab').forEach(t => t.classList.toggle('active', t.dataset.module === mod));
+      managerSub = 'all';
+      document.querySelectorAll('#manager-subtabs .tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'all'));
+      renderManager();
+    }
+    function managerSubTab(tab) {
+      managerSub = tab;
+      document.querySelectorAll('#manager-subtabs .tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+      renderManager();
+    }
+    function renderManager() {
+      const box = document.getElementById('manager-list');
+      let list = [];
+      if (managerModule === 'sampling') {
+        list = samplingData;
+        if (managerSub === 'pending') list = list.filter(r => r.status === 'pending');
+        else if (managerSub === 'completed') list = list.filter(r => r.status === 'completed' || r.status === 'failed');
+      } else {
+        list = maintenanceData;
+        if (managerSub === 'pending') list = list.filter(r => r.status === 'new' || r.status === 'in_progress');
+        else if (managerSub === 'completed') list = list.filter(r => r.status === 'completed');
+      }
+      if (!list.length) {
+        box.innerHTML = `<div class="empty-state"><div class="icon">📭</div><p>No records</p></div>`;
+        return;
+      }
+      box.innerHTML = list.map(r => managerModule === 'sampling' ? sampCard(r) : mntCard(r)).join('');
+    }
+
+    // ---------- SAMPLING UI ----------
+    function sampTab(tab) {
+      sampCurrentTab = tab;
+      document.querySelectorAll('#sampling-screen .tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+      renderSampling();
+    }
+    function renderSampling() {
+      const box = document.getElementById('sampling-list');
+      let list = samplingData;
+      if (sampCurrentTab === 'pending') list = list.filter(r => r.status === 'pending');
+      else if (sampCurrentTab === 'completed') list = list.filter(r => r.status === 'completed' || r.status === 'failed');
+      const pendingCount = samplingData.filter(r => r.status === 'pending').length;
+      const badge = document.getElementById('samp-pending-count');
+      badge.textContent = pendingCount;
+      badge.style.display = pendingCount ? 'flex' : 'none';
+
+      if (!list.length) {
+        box.innerHTML = `<div class="empty-state"><div class="icon">✅</div><p>No items</p></div>`;
+        return;
+      }
+      box.innerHTML = list.map(sampCard).join('');
+    }
+    function sampCard(r) {
+      const st = r.status === 'completed' ? 'completed' : (r.status === 'failed' ? 'failed' : 'pending');
+      const label = r.status === 'completed' ? 'Pass' : (r.status === 'failed' ? 'Fail' : 'Pending');
+      return `<div class="card ${st}" onclick="openSamplingDetail('${r.id}')">
+        <div class="card-header"><span class="card-id">${esc(r.sampleId)}</span>
+          <span class="card-status ${st}">${label}</span></div>
+        <div class="card-desc">${esc(r.description)}</div>
+        <div class="card-meta"><span>${formatDate(r.createdAt)}</span></div>
+      </div>`;
+    }
+    function showCreateSampling() {
+      document.getElementById('samp-id').value = '';
+      document.getElementById('samp-desc').value = '';
+      document.getElementById('samp-priority').value = 'normal';
+      document.getElementById('create-samp-modal').classList.remove('hidden');
+    }
+    async function createSampling(e) {
+      e.preventDefault();
+      const btn = document.getElementById('samp-create-btn');
+      btn.disabled = true; btn.textContent = 'Creating...';
+      try {
+        const res = await api('create', {
+          sampleId: document.getElementById('samp-id').value.trim(),
+          description: document.getElementById('samp-desc').value.trim(),
+          priority: document.getElementById('samp-priority').value,
+          createdBy: currentRole
+        });
+        if (res.success) {
+          hideModal('create-samp-modal');
+          showToast('Request created', 'success');
+          loadAll();
+        } else showToast(res.error || 'Failed', 'error');
+      } catch(err) { showToast('Error', 'error'); }
+      finally { btn.disabled = false; btn.textContent = 'Create Request'; }
+    }
+
+    // ---------- MAINTENANCE UI ----------
+    function mntTab(tab) {
+      mntCurrentTab = tab;
+      document.querySelectorAll('#maintenance-screen .tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+      renderMaintenance();
+    }
+    function renderMaintenance() {
+      const box = document.getElementById('maintenance-list');
+      let list = maintenanceData.filter(r => r.status === mntCurrentTab);
+      const openCount = maintenanceData.filter(r => r.status === 'new' || r.status === 'in_progress').length;
+      const badge = document.getElementById('mnt-open-count');
+      badge.textContent = openCount;
+      badge.style.display = openCount ? 'flex' : 'none';
+
+      if (!list.length) {
+        box.innerHTML = `<div class="empty-state"><div class="icon">🔧</div><p>No jobs in this tab</p></div>`;
+        return;
+      }
+      box.innerHTML = list.map(mntCard).join('');
+    }
+    function mntCard(r) {
+      const st = r.status || 'new';
+      const label = st === 'new' ? 'New' : (st === 'in_progress' ? 'In Progress' : 'Completed');
+      return `<div class="card ${st}" onclick="openMaintenanceDetail('${r.id}')">
+        <div class="card-header">
+          <span class="card-id">${esc(r.customerName)} • ${esc(r.printerModel)}</span>
+          <span class="card-status ${st}">${label}</span>
+        </div>
+        <div class="card-desc">${esc(r.serialNo)} • ${esc(r.currentCondition)}</div>
+        <div class="card-meta">
+          <span>${esc(r.engineerName)}</span>
+          <span>${formatDate(r.requestDate || r.createdAt)}</span>
+        </div>
+      </div>`;
+    }
+    function showCreateMaintenance() {
+      document.getElementById('mnt-customer').value = '';
+      document.getElementById('mnt-place').value = '';
+      document.getElementById('mnt-requestedby').value = '';
+      document.getElementById('mnt-model').value = '';
+      document.getElementById('mnt-serial').value = '';
+      document.getElementById('mnt-engineer').value = '';
+      document.getElementById('mnt-condition').value = '';
+      document.getElementById('mnt-date').value = new Date().toISOString().slice(0,10);
+      document.getElementById('create-mnt-modal').classList.remove('hidden');
+    }
+    async function createMaintenance(e) {
+      e.preventDefault();
+      const btn = document.getElementById('mnt-create-btn');
+      btn.disabled = true; btn.textContent = 'Creating...';
+      try {
+        const res = await api('createMaintenance', {
+          customerName: document.getElementById('mnt-customer').value.trim(),
+          place: document.getElementById('mnt-place').value.trim(),
+          requestedBy: document.getElementById('mnt-requestedby').value.trim(),
+          printerModel: document.getElementById('mnt-model').value.trim(),
+          serialNo: document.getElementById('mnt-serial').value.trim(),
+          requestDate: document.getElementById('mnt-date').value,
+          engineerName: document.getElementById('mnt-engineer').value.trim(),
+          currentCondition: document.getElementById('mnt-condition').value.trim()
+        });
+        if (res.success) {
+          hideModal('create-mnt-modal');
+          showToast('Job created', 'success');
+          loadAll();
+        } else showToast(res.error || 'Failed', 'error');
+      } catch(err) { showToast('Error', 'error'); }
+      finally { btn.disabled = false; btn.textContent = 'Create Job'; }
+    }
+
+    // ---------- DETAIL VIEWS ----------
+    function openSamplingDetail(id) {
+      const r = samplingData.find(x => x.id === id);
+      if (!r) return;
+      document.getElementById('detail-title').textContent = r.sampleId;
+      const body = document.getElementById('detail-body');
+      let html = `<div class="detail-section">
+        <div class="detail-row"><span class="label">Status</span><span class="value">${r.status}</span></div>
+        <div class="detail-row"><span class="label">Created</span><span class="value">${formatDate(r.createdAt)}</span></div>
+        <div class="detail-row" style="border:none;flex-direction:column;align-items:flex-start;gap:0.2rem">
+          <span class="label">Description</span><span class="value" style="text-align:left;max-width:100%">${esc(r.description)}</span>
+        </div>
+      </div>`;
+
+      if (r.status === 'pending' && (currentRole === 'sampling' || currentRole === 'manager')) {
+        html += `<div class="detail-section">
+          <div class="form-group" style="padding:0">
+            <label>Sample Photo *</label>
+            <div class="photo-placeholder" id="photo-box" onclick="document.getElementById('photo-input').click()">
+              <span style="font-size:1.6rem">📷</span><span>Tap for photo</span>
+              <input type="file" id="photo-input" accept="image/*" capture="environment" onchange="previewPhoto(this)">
+            </div>
+            <img id="photo-preview" class="photo-preview" style="display:none">
+          </div>
+          <div class="form-group" style="padding:0;margin-top:0.8rem">
+            <label>Measurements / Results</label>
+            <textarea id="measurements" rows="2"></textarea>
+          </div>
+          <div class="form-group" style="padding:0">
+            <label>Result *</label>
+            <div class="result-btns">
+              <button type="button" class="btn" id="btn-pass" onclick="setResult('pass')">✅ Pass</button>
+              <button type="button" class="btn" id="btn-fail" onclick="setResult('fail')">❌ Fail</button>
+            </div>
+          </div>
+          <div class="form-group" style="padding:0">
+            <label>Comments</label>
+            <textarea id="comments" rows="2"></textarea>
+          </div>
+          <button class="btn success full" id="submit-btn" onclick="submitSampling('${r.id}')">Submit Report</button>
+        </div>`;
+      } else {
+        html += `<div class="detail-section">
+          ${r.photoUrl ? `<img src="${r.photoUrl}" class="photo-preview">` : ''}
+          <div class="detail-row"><span class="label">Measurements</span><span class="value">${esc(r.measurements||'—')}</span></div>
+          <div class="detail-row"><span class="label">Result</span><span class="value">${r.result||'—'}</span></div>
+          <div class="detail-row" style="border:none;flex-direction:column;align-items:flex-start">
+            <span class="label">Comments</span><span class="value" style="text-align:left">${esc(r.comments||'—')}</span>
+          </div>
+        </div>`;
+      }
+      body.innerHTML = html;
+      document.getElementById('detail-modal').classList.remove('hidden');
+      window._selectedResult = null;
+      window._photoData = null;
+    }
+
+    function openMaintenanceDetail(id) {
+      const r = maintenanceData.find(x => x.id === id);
+      if (!r) return;
+      editingMntId = id;
+      currentSpares = Array.isArray(r.spares) ? [...r.spares] : [];
+      document.getElementById('detail-title').textContent = r.customerName + ' • ' + r.printerModel;
+      const body = document.getElementById('detail-body');
+
+      let html = `<div class="detail-section">
+        <div class="detail-row"><span class="label">Customer</span><span class="value">${esc(r.customerName)}</span></div>
+        <div class="detail-row"><span class="label">Place</span><span class="value">${esc(r.place)}</span></div>
+        <div class="detail-row"><span class="label">Model / Sr.No</span><span class="value">${esc(r.printerModel)} / ${esc(r.serialNo)}</span></div>
+        <div class="detail-row"><span class="label">Engineer</span><span class="value">${esc(r.engineerName)}</span></div>
+        <div class="detail-row"><span class="label">Date</span><span class="value">${esc(r.requestDate)}</span></div>
+        <div class="detail-row" style="border:none;flex-direction:column;align-items:flex-start;gap:0.2rem">
+          <span class="label">Current Condition / Problem</span>
+          <span class="value" style="text-align:left;max-width:100%">${esc(r.currentCondition)}</span>
+        </div>
+      </div>`;
+
+      // Status actions
+      if (r.status === 'new' && currentRole === 'maintenance') {
+        html += `<div class="detail-section">
+          <button class="btn warning full" onclick="startJob('${r.id}')">▶ Create Job → Move to Work in Progress</button>
+        </div>`;
+      }
+
+      if (r.status === 'in_progress' && currentRole === 'maintenance') {
+        // Spares section
+        html += `<div class="section-title">Spares Used</div>
+          <div class="detail-section" id="spares-list">${renderSparesList()}</div>
+          <div class="form-group">
+            <label>Add Spare</label>
+            <input type="text" id="spare-name" placeholder="Spare name" />
+          </div>
+          <div class="form-group">
+            <input type="text" id="spare-desc" placeholder="Description (optional)" />
+          </div>
+          <button class="btn outline full" style="margin-top:0" onclick="addSpare()">＋ Add Spare</button>
+
+          <div class="section-title" style="margin-top:1rem">Work Done Report</div>
+          <div class="form-group">
+            <textarea id="work-done" rows="3" placeholder="Short summary of work done...">${esc(r.workDoneReport||'')}</textarea>
+          </div>
+
+          <div class="section-title">Remarks / Tags</div>
+          <div class="form-group">
+            <textarea id="remarks" rows="2" placeholder="Special comments...">${esc(r.remarks||'')}</textarea>
+          </div>
+
+          <div class="section-title">Closure</div>
+          <div class="form-group">
+            <label>Closing Date</label>
+            <input type="date" id="closure-date" value="${new Date().toISOString().slice(0,10)}" />
+          </div>
+          <div class="form-group">
+            <label>Printer Status *</label>
+            <div class="result-btns">
+              <button type="button" class="btn" id="btn-ok" onclick="setPrinterStatus('Ok')">✅ Ok</button>
+              <button type="button" class="btn" id="btn-notok" onclick="setPrinterStatus('Not Ok')">❌ Not Ok</button>
+            </div>
+          </div>
+          <button class="btn success full" id="close-btn" onclick="closeJob('${r.id}')">Close Job → Move to Completed</button>
+        `;
+      }
+
+      if (r.status === 'completed') {
+        html += `<div class="detail-section">
+          <div class="detail-row"><span class="label">Status</span><span class="value">Completed</span></div>
+          <div class="detail-row"><span class="label">Printer Status</span><span class="value">${esc(r.printerStatus||'—')}</span></div>
+          <div class="detail-row"><span class="label">Closed On</span><span class="value">${esc(r.closureDate||'—')}</span></div>
+          <div class="detail-row" style="border:none;flex-direction:column;align-items:flex-start">
+            <span class="label">Work Done</span><span class="value" style="text-align:left">${esc(r.workDoneReport||'—')}</span>
+          </div>
+          <div class="detail-row" style="border:none;flex-direction:column;align-items:flex-start">
+            <span class="label">Remarks</span><span class="value" style="text-align:left">${esc(r.remarks||'—')}</span>
+          </div>
+          <div class="section-title">Spares Used</div>
+          ${(Array.isArray(r.spares) && r.spares.length) ? r.spares.map(s => `
+            <div class="spare-item"><div class="info"><div class="name">${esc(s.name)}</div>
+            <div class="desc">${esc(s.description||'')}</div></div></div>`).join('') : '<p style="color:var(--text-muted);font-size:0.85rem;padding:0 0 0.5rem">No spares recorded</p>'}
+        </div>`;
+      }
+
+      body.innerHTML = html;
+      document.getElementById('detail-modal').classList.remove('hidden');
+      window._printerStatus = r.printerStatus || null;
+    }
+
+    function renderSparesList() {
+      if (!currentSpares.length) return '<p style="color:var(--text-muted);font-size:0.85rem">No spares added yet</p>';
+      return currentSpares.map((s, i) => `
+        <div class="spare-item">
+          <div class="info"><div class="name">${esc(s.name)}</div><div class="desc">${esc(s.description||'')}</div></div>
+          <button class="remove" onclick="removeSpare(${i})">×</button>
+        </div>`).join('');
+    }
+    function addSpare() {
+      const name = document.getElementById('spare-name').value.trim();
+      if (!name) { showToast('Enter spare name', 'error'); return; }
+      const desc = document.getElementById('spare-desc').value.trim();
+      currentSpares.push({ name, description: desc });
+      document.getElementById('spare-name').value = '';
+      document.getElementById('spare-desc').value = '';
+      document.getElementById('spares-list').innerHTML = renderSparesList();
+    }
+    function removeSpare(idx) {
+      currentSpares.splice(idx, 1);
+      document.getElementById('spares-list').innerHTML = renderSparesList();
+    }
+
+    async function startJob(id) {
+      const res = await api('updateMaintenance', { id, status: 'in_progress' });
+      if (res.success) {
+        showToast('Moved to Work in Progress', 'success');
+        hideModal('detail-modal');
+        loadAll();
+      } else showToast('Failed', 'error');
+    }
+
+    function setPrinterStatus(val) {
+      window._printerStatus = val;
+      document.getElementById('btn-ok').classList.toggle('active', val === 'Ok');
+      document.getElementById('btn-ok').classList.toggle('ok', val === 'Ok');
+      document.getElementById('btn-notok').classList.toggle('active', val === 'Not Ok');
+      document.getElementById('btn-notok').classList.toggle('notok', val === 'Not Ok');
+    }
+
+    async function closeJob(id) {
+      if (!window._printerStatus) { showToast('Select Ok or Not Ok', 'error'); return; }
+      const btn = document.getElementById('close-btn');
+      btn.disabled = true; btn.textContent = 'Closing...';
+      try {
+        const res = await api('updateMaintenance', {
+          id,
+          status: 'completed',
+          spares: currentSpares,
+          workDoneReport: document.getElementById('work-done').value.trim(),
+          remarks: document.getElementById('remarks').value.trim(),
+          closureDate: document.getElementById('closure-date').value,
+          printerStatus: window._printerStatus
+        });
+        if (res.success) {
+          showToast('Job closed successfully', 'success');
+          hideModal('detail-modal');
+          loadAll();
+        } else showToast(res.error || 'Failed', 'error');
+      } catch(e) { showToast('Error', 'error'); }
+      finally { btn.disabled = false; btn.textContent = 'Close Job → Move to Completed'; }
+    }
+
+    // ---------- SAMPLING SUBMIT ----------
+    function setResult(val) {
+      window._selectedResult = val;
+      const p = document.getElementById('btn-pass');
+      const f = document.getElementById('btn-fail');
+      if (p) { p.classList.toggle('active', val==='pass'); p.classList.toggle('pass', val==='pass'); }
+      if (f) { f.classList.toggle('active', val==='fail'); f.classList.toggle('fail', val==='fail'); }
+    }
+    function previewPhoto(input) {
+      if (!input.files?.[0]) return;
+      const reader = new FileReader();
+      reader.onload = e => {
+        const img = new Image();
+        img.onload = () => {
+          const c = document.createElement('canvas');
+          let w = img.width, h = img.height;
+          if (w > 1100) { h = h * 1100 / w; w = 1100; }
+          c.width = w; c.height = h;
+          c.getContext('2d').drawImage(img, 0, 0, w, h);
+          window._photoData = c.toDataURL('image/jpeg', 0.72);
+          document.getElementById('photo-preview').src = window._photoData;
+          document.getElementById('photo-preview').style.display = 'block';
+          document.getElementById('photo-box').style.display = 'none';
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(input.files[0]);
+    }
+    async function submitSampling(id) {
+      if (!window._selectedResult) { showToast('Select Pass or Fail', 'error'); return; }
+      if (!window._photoData) { showToast('Photo required', 'error'); return; }
+      const btn = document.getElementById('submit-btn');
+      btn.disabled = true; btn.innerHTML = '<div class="spinner"></div>';
+      try {
+        const photoRes = await api('uploadPhoto', { photoBase64: window._photoData, fileName: id+'.jpg' });
+        if (!photoRes.success) throw new Error(photoRes.error);
+        const res = await api('update', {
+          id,
+          status: window._selectedResult === 'pass' ? 'completed' : 'failed',
+          result: window._selectedResult,
+          measurements: document.getElementById('measurements').value.trim(),
+          comments: document.getElementById('comments').value.trim(),
+          photoUrl: photoRes.photoUrl,
+          completedAt: new Date().toISOString(),
+          completedBy: currentRole
+        });
+        if (res.success) {
+          hideModal('detail-modal');
+          showToast('Submitted', 'success');
+          loadAll();
+        } else showToast('Failed', 'error');
+      } catch(e) { showToast(e.message || 'Error', 'error'); }
+      finally { btn.disabled = false; btn.textContent = 'Submit Report'; }
+    }
+
+    // ---------- EXPORT ----------
+    function exportCurrent() {
+      let data = [], filename = '', headers = [];
+      if (managerModule === 'sampling') {
+        data = samplingData.filter(r => r.status === 'completed' || r.status === 'failed');
+        filename = 'Sampling_Reports_';
+        headers = ['Sample ID','Description','Priority','Status','Result','Measurements','Comments','Created','Completed','Photo'];
+        if (!data.length) { showToast('No completed sampling reports', 'error'); return; }
+        downloadCSV(headers, data.map(r => [
+          r.sampleId, r.description, r.priority, r.status, r.result,
+          r.measurements, r.comments, r.createdAt, r.completedAt, r.photoUrl
+        ]), filename);
+      } else {
+        data = maintenanceData.filter(r => r.status === 'completed');
+        filename = 'Maintenance_Reports_';
+        headers = ['Customer','Place','Requested By','Model','Serial No','Request Date','Engineer','Condition','Spares','Work Done','Remarks','Closure Date','Printer Status'];
+        if (!data.length) { showToast('No completed maintenance jobs', 'error'); return; }
+        downloadCSV(headers, data.map(r => [
+          r.customerName, r.place, r.requestedBy, r.printerModel, r.serialNo,
+          r.requestDate, r.engineerName, r.currentCondition,
+          Array.isArray(r.spares) ? r.spares.map(s => s.name).join('; ') : '',
+          r.workDoneReport, r.remarks, r.closureDate, r.printerStatus
+        ]), filename);
+      }
+    }
+    function downloadCSV(headers, rows, prefix) {
+      let csv = headers.join(',') + '\n';
+      rows.forEach(row => {
+        csv += row.map(c => `"${String(c||'').replace(/"/g,'""')}"`).join(',') + '\n';
+      });
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = prefix + new Date().toISOString().slice(0,10) + '.csv';
+      a.click();
+      showToast('Excel file downloaded', 'success');
+    }
+
+    // ---------- HELPERS ----------
+    function hideModal(id) { document.getElementById(id).classList.add('hidden'); }
+    function formatDate(iso) {
+      if (!iso) return '—';
+      return new Date(iso).toLocaleDateString(undefined, { day:'numeric', month:'short', year:'numeric' });
+    }
+    function esc(s) {
+      if (!s) return '';
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+    function showToast(msg, type='') {
+      const t = document.getElementById('toast');
+      t.textContent = msg; t.className = 'toast ' + type;
+      setTimeout(() => t.classList.add('hidden'), 2800);
+    }
+
+    // ---------- PWA SERVICE WORKER ----------
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+          .then((reg) => console.log('Service Worker registered', reg.scope))
+          .catch((err) => console.log('SW registration failed', err));
+      });
+    }
+  </script>
+</body>
+</html>
